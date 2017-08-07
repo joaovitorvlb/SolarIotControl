@@ -106,9 +106,11 @@ void loop(void)
 {
   if (cont >= 10000)
   {
+    
     cont = 0; 
     Serial.println(ct);
     ct++;
+
     if (client.connected() == 0) 
     {
       while (client.connect(host, httpPort) == 0) 
@@ -122,7 +124,7 @@ void loop(void)
         Serial.println();
         Serial.println("Conectado ao servidor");
 
-        client.print(ct);
+        client.print(String(ct));
         c = client.read();
         Serial.println(c);
         client.stop();
