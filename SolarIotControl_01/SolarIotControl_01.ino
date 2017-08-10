@@ -127,7 +127,7 @@ void setup(void)
 
 void loop(void) 
 {
- //----------Rotina de envio via socket------------------------------
+ //------------Rotina de envio via socket------------------------------
   if (flag_sckt == 1)
   {
     flag_sckt = 0; 
