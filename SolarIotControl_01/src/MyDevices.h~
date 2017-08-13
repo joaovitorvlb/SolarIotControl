@@ -1,0 +1,4 @@
+#define ip_oran_l_1 = '192.168.0.112'
+
+#define SSID_02  = 'IOT-2'         // your network SSID (name)
+#define PSK_02   = 'mj110032'          // your network password
