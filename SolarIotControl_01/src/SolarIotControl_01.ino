@@ -7,27 +7,31 @@
 
 #include "MyDevices.h"
 
-#define CURRENT_MAX   1200.0
-#define ADC_MAXCOUNTS 17130.0
+#define CURRENT_MAX    1200.0
+#define ADC_MAXCOUNTS  17130.0
 
-#define LD1       12
-#define RL1       15
-#define RL2       13
+#define LD1            12
+#define LED            2
+#define RL1            15
+#define RL2            13
 
-#define S1        0
-#define S2        2
-#define S3        14
+#define S1             0
+#define S2             14
 
 int status = WL_IDLE_STATUS;
 WiFiClient  client;
 
 const char* host      = ip_oran_l_1;
-const int   Port    = 500;
+const int   Port      = 500;
 
 char ssid[]           = SSID_02;         // your network SSID (name)
 char pass[]           = PSK_02;          // your network password
 
 String buff;
+
+String Strhorr;
+String Strminn;
+String Strsegg;
 
 String StrIr0;
 String StrIr1;
@@ -36,8 +40,10 @@ String StrIr3;
 
 int TimeSock          = 0;
 int TimeAdc           = 0;
+uint16_t tick         = 0;
+bool toggle           = false;
 
-int CtAdMs            = 0;
+int CtAdMs            = 1;
 int CtAdMseg          = 0;
 
 int ano               = 0;
@@ -49,19 +55,20 @@ int segg              = 0;
 char flag             = 0;
 char flag_sckt        = 0;
 
-int32_t AcumAdc0;
-int32_t AcumAdc1;
-int32_t AcumAdc2;
-int32_t AcumAdc3;
+uint16_t AcumAdc0     = 0;
+uint16_t AcumAdc1     = 0;
+uint16_t AcumAdc2     = 0;
+uint16_t AcumAdc3     = 0;
 
-int32_t  acumic0      = 0;
-int32_t  acumic1      = 0;
-int32_t  acumic2      = 0;
-int32_t  acumic3      = 0;
-float    iresult0     = 0;
-float    iresult1     = 0;
-float    iresult2     = 0;
-float    iresult3     = 0;
+uint32_t  acumic0      = 0;
+uint32_t  acumic1      = 0;
+uint32_t  acumic2      = 0;
+uint32_t  acumic3      = 0;
+
+float     iresult0     = 0;
+float     iresult1     = 0;
+float     iresult2     = 0;
+float     iresult3     = 0;
 
 
 
@@ -74,6 +81,7 @@ void timer0_ISR (void)
 {
   TimeSock++;
   TimeAdc++;
+  tick++;
   timer0_write(ESP.getCycleCount() + 80000);      //Starts timer again from nodemcu to 1ms
 }
 
@@ -105,29 +113,46 @@ void setup(void)
     Serial.println("Couldn't find RTC");
     while (1);
   }
-  rtc.adjust(DateTime(2014, 1, 22, 3, 2, 3));
+  //rtc.adjust(DateTime(2017, 8, 19, 20, 20, 0));
 
   pinMode(LD1, OUTPUT);
+  pinMode(LED, OUTPUT);
   pinMode(RL1, OUTPUT);
   pinMode(RL2, OUTPUT);
 
   pinMode(S1, INPUT);
   pinMode(S2, INPUT);
-  pinMode(S3, INPUT);
 
-  digitalWrite(LD1, HIGH);
-  digitalWrite(RL1, HIGH);
-  digitalWrite(RL2, HIGH);
+  digitalWrite(LD1, LOW);
+  digitalWrite(LED, LOW);
+  digitalWrite(RL1, LOW);
+  digitalWrite(RL2, LOW);
 
   noInterrupts();
   timer0_isr_init();
   timer0_attachInterrupt(timer0_ISR);
   timer0_write(ESP.getCycleCount() + 80000);     //1ms Interruption of 1ms in nodemcu
   interrupts();
+
+  Serial.println("tUDO OK!");
 }
 
 void loop(void)
 {
+  if (tick >= 250)
+  {
+    tick = 0;
+    if (toggle)
+    {
+      digitalWrite(LED, HIGH);
+      toggle = false;
+    }
+    else
+    {
+      digitalWrite(LED, LOW);
+      toggle = true;
+    }
+  }
  //----------------Rotina de envio via socket------------------------------
   if (flag_sckt == 1)
   {
@@ -146,12 +171,12 @@ void loop(void)
           break;
         }
       }
-
       if (client.connected() == 1)
       {
         Serial.println("Conectado ao servidor");
         buff = "ESP01-IIII:" + StrIr0 + ":" + StrIr1 + ":" + StrIr2 + ":" + StrIr3;
         client.print(buff);
+        Serial.println("Pacote enviado!");
         client.stop();
         Serial.println("Conecao encerrada");
       }
@@ -160,22 +185,24 @@ void loop(void)
 //----------Rotina do rtc------------------------------
   DateTime now = rtc.now();
 
+  delay(100);
+
   horr = (now.hour());
   minn = (now.minute());
   segg = (now.second());
-
-  delay(500);
 
   //----------Rotina de varrredura adc-----------------
 
   if (TimeAdc >= 250)
   {
+    noInterrupts();
     TimeAdc = 0;
     CtAdMs++;
     AcumAdc0 = AcumAdc0 + ads.readADC_SingleEnded(0);
     AcumAdc1 = AcumAdc1 + ads.readADC_SingleEnded(1);
     AcumAdc2 = AcumAdc2 + ads.readADC_SingleEnded(2);
     AcumAdc3 = AcumAdc3 + ads.readADC_SingleEnded(3);
+    interrupts();
   }
 
   if((segg == 0) && (flag == 0))
@@ -186,19 +213,19 @@ void loop(void)
     acumic2 = acumic2 + (AcumAdc2 / CtAdMs);
     acumic3 = acumic3 + (AcumAdc3 / CtAdMs);
 
-    CtAdMs = 0;
+    CtAdMs = 1;
     AcumAdc0 = 0;
     AcumAdc1 = 0;
     AcumAdc2 = 0;
     AcumAdc3 = 0;
 
-    Serial.print(") ");
+    Serial.print(" (");
     Serial.print(horr);
     Serial.print(':');
     Serial.print(minn);
     Serial.print(':');
     Serial.print(segg);
-    Serial.print("--");
+    Serial.print(")-->");
 
     Serial.print(" IC-0: "); Serial.print(acumic0);
     Serial.print(" IC-1: "); Serial.print(acumic1);
@@ -214,19 +241,19 @@ void loop(void)
     acumic2 = acumic2 + (AcumAdc2 / CtAdMs);
     acumic3 = acumic3 + (AcumAdc3 / CtAdMs);
 
-    CtAdMs = 0;
+    CtAdMs = 1;
     AcumAdc0 = 0;
     AcumAdc1 = 0;
     AcumAdc2 = 0;
     AcumAdc3 = 0;
 
-    Serial.print(") ");
+    Serial.print(" (");
     Serial.print(horr);
     Serial.print(':');
     Serial.print(minn);
     Serial.print(':');
     Serial.print(segg);
-    Serial.print("--");
+    Serial.print(")-->");
 
     Serial.print(" IC-0: "); Serial.print(acumic0);
     Serial.print(" IC-1: "); Serial.print(acumic1);
@@ -243,19 +270,19 @@ void loop(void)
     acumic2 = acumic2 + (AcumAdc2 / CtAdMs);
     acumic3 = acumic3 + (AcumAdc3 / CtAdMs);
 
-    CtAdMs = 0;
+    CtAdMs = 1;
     AcumAdc0 = 0;
     AcumAdc1 = 0;
     AcumAdc2 = 0;
     AcumAdc3 = 0;
 
-    Serial.print(") ");
+    Serial.print(" (");
     Serial.print(horr);
     Serial.print(':');
     Serial.print(minn);
     Serial.print(':');
     Serial.print(segg);
-    Serial.print("--");
+    Serial.print(")-->");
 
     Serial.print(" IC-0: "); Serial.print(acumic0);
     Serial.print(" IC-1: "); Serial.print(acumic1);
@@ -271,19 +298,19 @@ void loop(void)
     acumic2 = acumic2 + (AcumAdc2 / CtAdMs);
     acumic3 = acumic3 + (AcumAdc3 / CtAdMs);
 
-    CtAdMs = 0;
+    CtAdMs = 1;
     AcumAdc0 = 0;
     AcumAdc1 = 0;
     AcumAdc2 = 0;
     AcumAdc3 = 0;
 
-    Serial.print(") ");
+    Serial.print(" (");
     Serial.print(horr);
     Serial.print(':');
     Serial.print(minn);
     Serial.print(':');
     Serial.print(segg);
-    Serial.print("--");
+    Serial.print(")-->");
 
     Serial.print(" IC-0: "); Serial.print(acumic0);
     Serial.print(" IC-1: "); Serial.print(acumic1);
@@ -299,19 +326,19 @@ void loop(void)
     acumic2 = acumic2 + (AcumAdc2 / CtAdMs);
     acumic3 = acumic3 + (AcumAdc3 / CtAdMs);
 
-    CtAdMs = 0;
+    CtAdMs = 1;
     AcumAdc0 = 0;
     AcumAdc1 = 0;
     AcumAdc2 = 0;
     AcumAdc3 = 0;
 
-    Serial.print(") ");
+    Serial.print(" (");
     Serial.print(horr);
     Serial.print(':');
     Serial.print(minn);
     Serial.print(':');
     Serial.print(segg);
-    Serial.print("--");
+    Serial.print(")-->");
 
     Serial.print(" IC-0: "); Serial.print(acumic0);
     Serial.print(" IC-1: "); Serial.print(acumic1);
@@ -321,30 +348,31 @@ void loop(void)
 
   if((segg == 50) && (flag == 50))
   {
+    digitalWrite(LD1, HIGH);
     flag = 0;
     acumic0 = acumic0 + (AcumAdc0 / CtAdMs);
     acumic1 = acumic1 + (AcumAdc1 / CtAdMs);
     acumic2 = acumic2 + (AcumAdc2 / CtAdMs);
     acumic3 = acumic3 + (AcumAdc3 / CtAdMs);
 
-    CtAdMs = 0;
+    CtAdMs = 1;
     AcumAdc0 = 0;
     AcumAdc1 = 0;
     AcumAdc2 = 0;
     AcumAdc3 = 0;
 
-    Serial.print(") ");
+    Serial.print(" (");
     Serial.print(horr);
     Serial.print(':');
     Serial.print(minn);
     Serial.print(':');
     Serial.print(segg);
-    Serial.print("--");
+    Serial.print(")-->");
 
-    Serial.print(" IC-0: "); Serial.print(acumic0);
-    Serial.print(" IC-1: "); Serial.print(acumic1);
-    Serial.print(" IC-3: "); Serial.print(acumic2);
-    Serial.print(" IC-3: "); Serial.println(acumic3);
+    Serial.print(" IC 0: "); Serial.print(acumic0);
+    Serial.print(" IC 1: "); Serial.print(acumic1);
+    Serial.print(" IC 3: "); Serial.print(acumic2);
+    Serial.print(" IC 3: "); Serial.println(acumic3);
 
     iresult0 = ((acumic0 / 6) * (CURRENT_MAX / ADC_MAXCOUNTS));
     iresult1 = ((acumic1 / 6) * (CURRENT_MAX / ADC_MAXCOUNTS));
@@ -362,5 +390,6 @@ void loop(void)
     StrIr3 = String(iresult3, 2);
 
     flag_sckt = 1;
+    digitalWrite(LD1, LOW);
   }
 }
